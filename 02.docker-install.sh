@@ -29,46 +29,32 @@ sudo systemctl enable docker
 # Add user to docker group
 sudo usermod -aG docker $USER
 
-
-# Instructions from: https://docs.docker.com/engine/userguide/storagedriver/device-mapper-driver/
 # Switch to LVM usage for devicemapper
-sudo service docker stop
+# Instructions from: https://docs.docker.com/engine/userguide/storagedriver/device-mapper-driver/
+# NOTE: Make sure you have correctly setup the LVM partitions from 001.partition-disk.sh
 
-sudo pvcreate $lvmdisk
-sudo vgcreate docker $lvmdisk
-sudo lvcreate --wipesignatures y -n thinpool docker -l 95%VG
-sudo lvcreate --wipesignatures y -n thinpoolmeta docker -l 1%VG
-sudo lvconvert -y --zero n -c 512K --thinpool docker/thinpool --poolmetadata docker/thinpoolmeta
-
-sudo mkdir /etc/lvm/profile
-sudo touch /etc/lvm/profile/docker-thinpool.profile
-sudo bash -c "cat <<EOT >> /etc/lvm/profile/docker-thinpool.profile                   │
-activation {                                                                                              │
-    thin_pool_autoextend_threshold=80                                                                     │
-    thin_pool_autoextend_percent=20                                                                       │
-}                                                                                                         │
-EOT"
-
-sudo lvchange --metadataprofile docker-thinpool docker/thinpool
+# NOTE: Make sure you use the correct /dev/mapper location below
 sudo -s -- <<EOT
-echo "DOCKER_OPTS=\"--storage-driver=devicemapper --storage-opt=dm.thinpooldev=/dev/mapper/docker-thinpool --storage-opt=dm.use_deferred_removal=true --storage-opt=dm.use_deferred_deletion=true\"" >> /etc/
+echo "DOCKER_OPTS=\"--storage-driver=devicemapper --storage-opt=dm.thinpooldev=/dev/mapper/lvmpart-thinpool --storage-opt=dm.use_deferred_removal=true --storage-opt=dm.use_deferred_deletion=true\"" >> /etc/default/docker
 EOT
 
+# NOTE: Make sure you use the correct /dev/mapper location below
 sudo touch /etc/docker/daemon.json
 sudo bash -c "cat <<EOT >> /etc/docker/daemon.json
 {
   "storage-driver": "devicemapper",
    "storage-opts": [
-     "dm.thinpooldev=/dev/mapper/docker-thinpool",
+     "dm.thinpooldev=/dev/mapper/lvmpart-thinpool",
      "dm.use_deferred_removal=true",
      "dm.use_deferred_deletion=true"
    ]
 }
+EOT"
 
 sudo service docker start
 
 # Verify everything is working ok
-sudo docker run hello-world
+docker run hello-world
 docker info
 
 
